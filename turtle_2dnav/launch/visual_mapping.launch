@@ -1,0 +1,153 @@
+<?xml version="1.0"?>
+
+<launch>
+
+  <param name="use_sim_time" value="true"/>
+  <!-- Load Robot Description -->
+  <arg name="model" default="$(find turtlebot3_description)/urdf/turtlebot3_burger.urdf"/>
+  <param name="robot_description" textfile="$(arg model)" />
+
+  <!-- Define some topic name -->
+  <arg name="scan_topic" default="base_scan"/>
+  <arg name="base_frame" default="base_link"/>
+  <arg name="odom_frame" value="odom"/>
+  <arg name="map_frame" value="map"/>
+  <arg name="camera_info" value="/camera/camera_info"/>
+  <arg name="rgb_image" value="/camera/rgb"/>
+  <arg name="depth_image" value="/camera/depth"/>
+  <arg name="pointcloud" value="/camera/points"/>
+
+  <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" />
+
+  <!-- Compute pointcloud from rgb and depth -->
+  <node pkg="nodelet" type="nodelet" name="nodelet1"
+        args="load depth_image_proc/point_cloud_xyzrgb nodelet_manager">
+    <remap from="rgb/camera_info" to="$(arg camera_info)"/>
+    <remap from="rgb/image_rect_color" to="$(arg rgb_image)"/>
+    <remap from="depth_registered/image_rect" to="$(arg depth_image)"/>
+    <remap from="depth_registered/points" to="$(arg pointcloud)"/>
+  </node>
+
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find turtle_2dnav)/turtle_2dnav_visual.rviz" />
+  
+  <!-- ROBOT MAPPING VERSION: use this with ROS bag demo_mapping.bag -->
+  <!-- WARNING : Database is automatically deleted on each startup -->
+  <!--           See "delete_db_on_start" option below... -->
+  <!-- <param name="use_sim_time" value="true"/> -->
+  <!-- Choose visualization -->
+  <arg name="rviz" default="false" />
+  <arg name="rtabmap_viz" default="false" />
+
+  <!-- <param name="use_sim_time" type="bool" value="True"/> -->
+
+  <!-- Localization-only mode -->
+  <arg name="localization"      default="false"/>
+  <arg     if="$(arg localization)" name="rtabmap_args"  default=""/>
+  <arg unless="$(arg localization)" name="rtabmap_args"  default="--delete_db_on_start"/>
+
+  <group ns="rtabmap">
+    <!-- SLAM (robot side) -->
+    <!-- args: "delete_db_on_start" and "udebug" -->
+    <node name="rtabmap" pkg="rtabmap_slam" type="rtabmap" output="screen" args="$(arg rtabmap_args)">
+	  <param name="frame_id"           type="string" value="base_footprint"/>
+	  <param name="wait_for_transform" type="bool" value="true"/>
+
+	  <param name="subscribe_depth" type="bool" value="true"/>
+	  <param name="subscribe_scan"  type="bool" value="false"/>
+    <param name="subscribe_rgbd" type="bool" value="false" />
+
+	  <!-- As /az3/base_controller/odom topic doesn't provide covariances, we use TF to get odom and we fix the covariance -->
+	  <param name="odom_frame_id"            type="string" value="odom"/>
+	  <param name="odom_tf_linear_variance"  type="double" value="0.001"/>
+	  <param name="odom_tf_angular_variance" type="double" value="0.001"/>
+
+	  <remap from="scan" to="/base_scan"/>
+
+	  <remap from="rgb/image"       to="/camera/rgb"/>
+    <remap from="depth/image"     to="/camera/depth"/>
+    <remap from="rgb/camera_info" to="/camera/camera_info"/>
+
+	  <param name="rgb/image_transport"   type="string" value="raw"/>
+	  <param name="depth/image_transport" type="string" value="raw"/>
+
+	  <!-- RTAB-Map's parameters: do "rosrun rtabmap rtabmap (double-dash)params" to see the list of available parameters. -->
+	  <param name="RGBD/NeighborLinkRefining" type="string" value="true"/>  <!-- Do odometry correction with consecutive laser scans -->
+	  <param name="RGBD/ProximityBySpace"     type="string" value="true"/>  <!-- Local loop closure detection (using estimated position) with locations in WM -->
+	  <param name="RGBD/ProximityByTime"      type="string" value="false"/> <!-- Local loop closure detection with locations in STM -->
+	  <param name="RGBD/ProximityPathMaxNeighbors" type="string" value="10"/> <!-- Do also proximity detection by space by merging close scans together. -->
+	  <param name="Reg/Strategy"              type="string" value="2"/>     <!-- 0=Visual, 1=ICP, 2=Visual+ICP -->
+	  <param name="Vis/MinInliers"            type="string" value="12"/>   <!-- 3D visual words correspondence distance -->
+	  <param name="RGBD/OptimizeFromGraphEnd" type="string" value="true"/> <!-- Optimize graph from initial node so /map -> /odom transform will be generated -->
+	  <param name="RGBD/OptimizeMaxError"     type="string" value="4"/>	    <!-- Reject any loop closure causing large errors (>3x link's covariance) in the map -->
+	  <param name="Reg/Force3DoF"             type="string" value="true"/>  <!-- 2D SLAM -->
+	  <param name="Grid/FromDepth"            type="string" value="false"/> <!-- Create 2D occupancy grid from laser scan -->
+    <param name="Grid/3D"                   type="string" value="true"/>
+    <param name="Grid/Sensor"               type="string" value="1"/>
+	  <param name="Mem/STMSize"               type="string" value="30"/>    <!-- increased to 30 to avoid adding too many loop closures on just seen locations -->
+	  <param name="RGBD/LocalRadius"          type="string" value="5"/>     <!-- limit length of proximity detections -->
+	  <param name="Icp/CorrespondenceRatio"   type="string" value="0.2"/>   <!-- minimum scan overlap to accept loop closure -->
+	  <param name="Icp/PM"                    type="string" value="false"/>
+	  <param name="Icp/PointToPlane"          type="string" value="false"/>
+	  <param name="Icp/MaxCorrespondenceDistance"  type="string" value="0.15"/>
+	  <param name="Icp/VoxelSize"             type="string" value="0.05"/>
+    <param name="map_always_update"         type="string" value="true"/>
+    <param name="map_filter_radius"         type="string" value="0.0"/>
+    <param name="map_filter_angle"         type="string" value="60"/>
+    <param name="cloud_output_voxelized"    type="string" value="true"/>
+    <param name="cloud_subtract_filtering"  type="string" value="true"/>
+    <param name="cloud_subtract_filtering_min_neighbors"  type="string" value="2"/>
+
+	  <!-- localization mode -->
+	  <param     if="$(arg localization)" name="Mem/IncrementalMemory" type="string" value="false"/>
+	  <param unless="$(arg localization)" name="Mem/IncrementalMemory" type="string" value="true"/>
+	  <param name="Mem/InitWMWithAllNodes" type="string" value="$(arg localization)"/>
+   </node>
+
+    <!-- Visualisation RTAB-Map -->
+    <node if="$(arg rtabmap_viz)" pkg="rtabmap_viz" type="rtabmap_viz" name="rtabmap_viz" args="-d $(find rtabmap_demos)/launch/config/rgbd_gui.ini" output="screen">
+  	  <param name="subscribe_depth"    type="bool" value="true"/>
+      <param name="subscribe_scan"     type="bool" value="false"/>
+      <param name="subscribe_rgbd" type="bool" value="false" />
+      <param name="frame_id"           type="string" value="base_footprint"/>
+      <param name="wait_for_transform" type="bool" value="true"/>
+
+      <!-- <remap from="rgb/image"       to="/data_throttled_image"/>
+      <remap from="depth/image"     to="/data_throttled_image_depth"/>
+      <remap from="rgb/camera_info" to="/data_throttled_camera_info"/> -->
+      <remap from="rgb/image"       to="/camera/rgb"/>
+  	  <remap from="depth/image"     to="/camera/depth"/>
+  	  <remap from="rgb/camera_info" to="/camera/camera_info"/>
+      <remap from="scan"            to="/base_scan"/>
+      <remap from="odom"            to="/odom"/>
+
+      <param name="rgb/image_transport"   type="string" value="raw"/>
+      <param name="depth/image_transport" type="string" value="raw"/>
+    </node>
+  </group>
+
+  <node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
+    <remap from="cloud_in" to="/rtabmap/local_grid_obstacle"/>
+    <!-- <remap from="octomap_binary" to="/rtabmap/real_octomap_obstacles"/> -->
+    <!-- To save the octomap: roscd turtle_2dnav/map/octomaps, rosrun octomap_server octomap_saver -f warehouse.bt -->
+  </node>
+
+  <!-- Visualisation RVIZ -->
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz" args="-d $(find rtabmap_demos)/launch/config/demo_robot_mapping.rviz" output="screen"/>
+   <node pkg="nodelet" type="nodelet" name="points_xyzrgb" args="standalone rtabmap_util/point_cloud_xyzrgb">
+    <!-- <remap from="rgb/image"       to="/data_throttled_image"/>
+    <remap from="depth/image"     to="/data_throttled_image_depth"/>
+    <remap from="rgb/camera_info" to="/data_throttled_camera_info"/> -->
+    <remap from="scan" to="/base_scan"/>
+    <remap from="rgb/image"       to="/camera/rgb"/>
+    <remap from="depth/image"     to="/camera/depth"/>
+    <remap from="rgb/camera_info" to="/camera/camera_info"/>
+    <remap from="cloud"           to="voxel_cloud" />
+
+    <param name="rgb/image_transport"   type="string" value="raw"/>
+    <param name="depth/image_transport" type="string" value="raw"/>
+
+    <param name="queue_size" type="int" value="10"/>
+    <param name="voxel_size" type="double" value="0.01"/>
+  </node>
+
+</launch>

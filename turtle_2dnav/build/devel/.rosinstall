@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/yzc/IsaacSim-ros_workspaces/noetic_ws/src/navigation/turtle_2dnav/build/devel/setup.sh
